@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>you were here</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=DM+Mono:wght@300;400&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0a0a0a;
+      --border: rgba(255,255,255,0.07);
+      --border-h: rgba(255,255,255,0.18);
+      --muted: rgba(255,255,255,0.55);
+    }
+
+    html, body {
+      min-height: 100vh;
+      background: var(--bg);
+      color: #fff;
+      font-family: 'DM Mono', monospace;
+      display: flex; flex-direction: column;
+      align-items: center;
+      padding: 3.5rem 1.5rem 5rem;
+      overflow-x: hidden;
+      cursor: none;
+    }
+
+    /* cursor */
+    #cursor {
+      position: fixed; width: 6px; height: 6px;
+      background: #fff; border-radius: 50%;
+      pointer-events: none; z-index: 9999;
+      transform: translate(-50%,-50%);
+      mix-blend-mode: difference;
+    }
+
+    /* overlays */
+    .scanlines {
+      position: fixed; inset: 0; z-index: 100; pointer-events: none;
+      background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.12) 2px, rgba(0,0,0,0.12) 4px);
+    }
+    .vignette {
+      position: fixed; inset: 0; z-index: 99; pointer-events: none;
+      background: radial-gradient(ellipse 85% 85% at 50% 50%, transparent 40%, rgba(0,0,0,0.55) 80%, rgba(0,0,0,0.95) 100%);
+    }
+    .bg-grid {
+      position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+      background-size: 48px 48px;
+    }
+
+    /* tv-in */
+    @keyframes tvIn {
+      0%   { transform: scaleY(0.005) scaleX(1.15); filter: brightness(8); opacity:1; }
+      50%  { transform: scaleY(0.5)   scaleX(1.02); filter: brightness(2); }
+      100% { transform: scaleY(1)     scaleX(1);    filter: brightness(1); }
+    }
+    .wrap {
+      position: relative; z-index: 10;
+      width: 100%; max-width: 420px;
+      display: flex; flex-direction: column; align-items: center; gap: 0;
+      animation: tvIn 0.65s cubic-bezier(0.16,1,0.3,1) both;
+    }
+
+    /* header */
+    .page-title {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: clamp(1.6rem, 6vw, 2.2rem);
+      font-weight: 300; font-style: italic;
+      letter-spacing: -0.01em;
+      color: rgba(255,255,255,0.95);
+      margin-bottom: 0.35rem;
+      text-align: center;
+    }
+    .page-sub {
+      font-size: 0.754rem; letter-spacing: 0.22em;
+      color: rgba(255,255,255,0.6); text-transform: uppercase;
+      margin-bottom: 2.4rem; text-align: center;
+    }
+
+    /* divider */
+    .div-line {
+      width: 28px; height: 1px;
+      background: rgba(255,255,255,0.12);
+      margin: 0 auto 2.4rem;
+    }
+
+    /* ── compose box ── */
+    .compose {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: rgba(255,255,255,0.025);
+      padding: 0.9rem 1rem;
+      display: flex; flex-direction: column; gap: 0.7rem;
+      margin-bottom: 2.2rem;
+      transition: border-color 0.3s;
+    }
+    .compose:focus-within { border-color: var(--border-h); }
+
+    .compose-input {
+      background: none; border: none; outline: none;
+      color: rgba(255,255,255,0.95);
+      font-family: 'DM Mono', monospace;
+      font-size: 0.943rem; letter-spacing: 0.04em;
+      width: 100%; resize: none;
+      caret-color: rgba(255,255,255,0.6);
+    }
+    .compose-input::placeholder { color: var(--muted); }
+
+    .name-input {
+      background: none; border: none; border-top: 1px solid var(--border);
+      outline: none; padding-top: 0.6rem;
+      color: rgba(255,255,255,0.75);
+      font-family: 'DM Mono', monospace;
+      font-size: 0.797rem; letter-spacing: 0.08em;
+      width: 100%;
+      caret-color: rgba(255,255,255,0.4);
+      transition: color 0.2s;
+    }
+    .name-input:focus { color: rgba(255,255,255,0.8); }
+    .name-input::placeholder { color: rgba(255,255,255,0.5); }
+
+    .compose-footer {
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .char-count {
+      font-size: 0.58rem; letter-spacing: 0.15em;
+      color: var(--muted); transition: color 0.2s;
+    }
+    .char-count.warn { color: rgba(255,255,255,0.75); }
+    .char-count.over { color: rgba(255,255,255,0.8); }
+
+    .submit-btn {
+      background: none; border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 4px; padding: 0.3rem 0.75rem;
+      color: rgba(255,255,255,0.7);
+      font-family: 'DM Mono', monospace;
+      font-size: 0.609rem; letter-spacing: 0.2em;
+      text-transform: uppercase; cursor: none;
+      transition: color 0.25s, border-color 0.25s, box-shadow 0.25s;
+    }
+    .submit-btn:hover:not(:disabled) {
+      color: rgba(255,255,255,0.95);
+      border-color: rgba(255,255,255,0.32);
+      box-shadow: 0 0 14px rgba(255,255,255,0.06);
+    }
+    .submit-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+    /* ── entries ── */
+    .entries-header {
+      width: 100%; display: flex; align-items: center;
+      justify-content: space-between;
+      margin-bottom: 0.9rem;
+    }
+    .entries-label {
+      font-size: 0.609rem; letter-spacing: 0.22em;
+      color: var(--muted); text-transform: uppercase;
+    }
+    .entries-count {
+      font-size: 0.609rem; letter-spacing: 0.15em;
+      color: rgba(255,255,255,0.5);
+    }
+
+    .entries { width: 100%; display: flex; flex-direction: column; gap: 0.55rem; }
+
+    @keyframes entryIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .entry {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.65rem 0.85rem;
+      background: rgba(255,255,255,0.018);
+      display: flex; flex-direction: column; gap: 0.3rem;
+      animation: entryIn 0.4s cubic-bezier(0.16,1,0.3,1) both;
+      transition: border-color 0.25s, background 0.25s;
+    }
+    .entry:hover {
+      border-color: rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.03);
+    }
+    .entry.new-entry {
+      border-color: rgba(255,255,255,0.5);
+      box-shadow: 0 0 20px rgba(255,255,255,0.04);
+    }
+
+    .entry-text {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 1.667rem; font-weight: 300; font-style: italic;
+      color: #ffffff;
+      line-height: 1.55;
+      word-break: break-word;
+    }
+    .entry-meta {
+      display: flex; align-items: center; gap: 0.6rem;
+      font-size: 0.638rem; letter-spacing: 0.13em;
+      color: rgba(255,255,255,0.55);
+      text-transform: uppercase;
+    }
+    .entry-name {
+      color: rgba(255,255,255,0.85);
+      font-size: 0.667rem; letter-spacing: 0.11em;
+    }
+    .entry-sep { color: rgba(255,255,255,0.35); }
+
+    /* empty state */
+    .empty {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 1.305rem; font-style: italic;
+      color: rgba(255,255,255,0.5);
+      text-align: center;
+      padding: 1.6rem 0;
+    }
+
+    /* flash confirm */
+    @keyframes confirmPop {
+      0%   { opacity: 0; transform: translateY(4px); }
+      20%  { opacity: 1; transform: translateY(0); }
+      80%  { opacity: 1; }
+      100% { opacity: 0; }
+    }
+    #confirm {
+      position: fixed; bottom: 2rem; left: 50%;
+      transform: translateX(-50%);
+      font-size: 0.609rem; letter-spacing: 0.28em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.75);
+      pointer-events: none; z-index: 200;
+      white-space: nowrap; opacity: 0;
+    }
+    #confirm.show { animation: confirmPop 2s ease forwards; }
+
+    /* back */
+    .back {
+      margin-top: 2.8rem;
+      font-size: 0.609rem; letter-spacing: 0.2em;
+      color: rgba(255,255,255,0.5);
+      text-decoration: none; text-transform: uppercase;
+      cursor: none; transition: color 0.25s;
+    }
+    .back:hover { color: rgba(255,255,255,0.75); }
+  </style>
+</head>
+<body>
+
+  <div id="cursor"></div>
+  <div class="scanlines"></div>
+  <div class="vignette"></div>
+  <div class="bg-grid"></div>
+  <div id="confirm"></div>
+
+  <div class="wrap">
+
+    <h1 class="page-title">you were here.</h1>
+    <p class="page-sub">one line · no rules · leave your name or don't</p>
+
+    <div class="compose">
+      <textarea
+        class="compose-input"
+        id="note-input"
+        rows="2"
+        maxlength="120"
+        placeholder="leave something behind..."
+        spellcheck="false"
+      ></textarea>
+      <input
+        class="name-input"
+        id="name-input"
+        type="text"
+        maxlength="32"
+        placeholder="— your name (optional)"
+        spellcheck="false"
+        autocomplete="off"
+      />
+      <div class="compose-footer">
+        <span class="char-count" id="char-count">120</span>
+        <button class="submit-btn" id="submit-btn">leave note →</button>
+      </div>
+    </div>
+
+    <div class="entries-header">
+      <span class="entries-label">notes left behind</span>
+      <span class="entries-count" id="entries-count">0</span>
+    </div>
+
+    <div class="entries" id="entries-list"></div>
+
+    <a class="back" href="secret.html">← back</a>
+
+  </div>
+
+  <script>
+    // cursor
+    const cur = document.getElementById('cursor');
+    document.addEventListener('mousemove', e => {
+      cur.style.left = e.clientX+'px'; cur.style.top = e.clientY+'px';
+    });
+
+    // ── storage (JSONBin) ──
+    const BIN_ID  = '69b0bb4784682b3562877552';
+    const API_KEY = '$2a$10$TR9LdMA0TmLvbj0PfZJD2eiOQusIsaRMLgV6RjyZpsf8lNiz5Jjiu';
+    const MAX_NOTES = 60;
+    const MAX_CHARS = 120;
+
+    async function loadNotes() {
+      try {
+        const r = await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}/latest`, {
+          headers: { 'X-Master-Key': API_KEY }
+        });
+        const d = await r.json();
+        return d.record || [];
+      } catch { return []; }
+    }
+
+    async function saveNotes(notes) {
+      await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'X-Master-Key': API_KEY },
+        body: JSON.stringify(notes)
+      });
+    }
+
+    // ── ui refs ──
+    const inputEl  = document.getElementById('note-input');
+    const nameEl   = document.getElementById('name-input');
+    const charEl   = document.getElementById('char-count');
+    const submitEl = document.getElementById('submit-btn');
+    const listEl   = document.getElementById('entries-list');
+    const countEl  = document.getElementById('entries-count');
+    const confirmEl= document.getElementById('confirm');
+
+    // ── char counter ──
+    inputEl.addEventListener('input', () => {
+      const rem = MAX_CHARS - inputEl.value.length;
+      charEl.textContent = rem;
+      charEl.className = 'char-count' + (rem <= 20 ? ' warn' : '') + (rem <= 5 ? ' over' : '');
+      submitEl.disabled = inputEl.value.trim().length === 0;
+    });
+    submitEl.disabled = true;
+
+    // ── render entries ──
+    function timeAgo(ts) {
+      const diff = Date.now() - ts;
+      const m = Math.floor(diff/60000);
+      const h = Math.floor(diff/3600000);
+      const d = Math.floor(diff/86400000);
+      if (m < 1)  return 'just now';
+      if (m < 60) return `${m}m ago`;
+      if (h < 24) return `${h}h ago`;
+      if (d < 30) return `${d}d ago`;
+      return new Date(ts).toLocaleDateString('en-US', {month:'short', day:'numeric'});
+    }
+
+    function renderNotes(notes, highlightFirst = false) {
+      countEl.textContent = notes.length;
+      if (notes.length === 0) {
+        listEl.innerHTML = '<p class="empty">no one has been here yet.</p>';
+        return;
+      }
+      listEl.innerHTML = '';
+      notes.forEach((n, i) => {
+        const el = document.createElement('div');
+        el.className = 'entry' + (highlightFirst && i === 0 ? ' new-entry' : '');
+        el.style.animationDelay = `${Math.min(i * 0.04, 0.3)}s`;
+        const nameHtml = n.name
+          ? `<span class="entry-name">${escHtml(n.name)}</span><span class="entry-sep">·</span>`
+          : '';
+        el.innerHTML = `
+          <div class="entry-text">${escHtml(n.text)}</div>
+          <div class="entry-meta">${nameHtml}<span>${timeAgo(n.ts)}</span></div>
+        `;
+        listEl.appendChild(el);
+      });
+    }
+
+    function escHtml(s) {
+      return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    // ── submit ──
+    function flash(msg) {
+      confirmEl.textContent = msg;
+      confirmEl.classList.remove('show');
+      void confirmEl.offsetWidth;
+      confirmEl.classList.add('show');
+    }
+
+    submitEl.addEventListener('click', async () => {
+      const text = inputEl.value.trim();
+      if (!text || text.length > MAX_CHARS) return;
+      const name = nameEl.value.trim().slice(0, 32) || null;
+
+      submitEl.disabled = true;
+      const notes = await loadNotes();
+      notes.unshift({ text, name, ts: Date.now() });
+      if (notes.length > MAX_NOTES) notes.pop();
+      await saveNotes(notes);
+
+      inputEl.value = '';
+      nameEl.value  = '';
+      charEl.textContent = MAX_CHARS;
+      charEl.className = 'char-count';
+
+      renderNotes(notes, true);
+      flash('note left ✦');
+      listEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+
+    // enter to submit
+    inputEl.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        if (!submitEl.disabled) submitEl.click();
+      }
+    });
+
+    // ── init ──
+    listEl.innerHTML = '<p class="empty">loading...</p>';
+    loadNotes().then(notes => renderNotes(notes));
+  </script>
+</body>
+</html>
