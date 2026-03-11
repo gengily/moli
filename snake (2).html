@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>completely normal snakie :)</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --green: #ffffff;
+      --green-dim: rgba(255,255,255,0.45);
+      --green-glow: rgba(255,255,255,0.12);
+      --bg: #080808;
+      --bg2: #0d0d0d;
+    }
+
+    html, body {
+      width: 100%; height: 100%;
+      background: var(--bg);
+      color: var(--green);
+      font-family: 'DM Mono', monospace;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      overflow: hidden;
+      cursor: none;
+    }
+
+    /* cursor */
+    #cursor {
+      position: fixed; width: 6px; height: 6px;
+      background: var(--green); border-radius: 50%;
+      pointer-events: none; z-index: 9999;
+      transform: translate(-50%,-50%);
+      mix-blend-mode: screen;
+    }
+
+    /* CRT overlays */
+    .scanlines {
+      position: fixed; inset: 0; pointer-events: none; z-index: 500;
+      background: repeating-linear-gradient(
+        0deg, transparent, transparent 2px,
+        rgba(0,0,0,0.22) 2px, rgba(0,0,0,0.22) 4px
+      );
+    }
+    .vignette {
+      position: fixed; inset: 0; pointer-events: none; z-index: 499;
+      background: radial-gradient(ellipse 80% 80% at 50% 50%,
+        transparent 40%, rgba(0,0,0,0.55) 80%, rgba(0,0,0,0.97) 100%);
+    }
+    #noise {
+      position: fixed; inset: 0; z-index: 498; pointer-events: none;
+      opacity: 0.045; mix-blend-mode: screen;
+    }
+
+    /* phosphor glow on everything */
+    * { text-shadow: 0 0 6px rgba(255,255,255,0.3); }
+
+    /* tv-in */
+    @keyframes tvIn {
+      0%   { transform: scaleY(0.005) scaleX(1.15); filter: brightness(8); }
+      50%  { transform: scaleY(0.5)   scaleX(1.02); filter: brightness(2); }
+      100% { transform: scaleY(1)     scaleX(1);    filter: brightness(1); }
+    }
+
+    .wrap {
+      display: flex; flex-direction: column; align-items: center; gap: 0.7rem;
+      position: relative; z-index: 10;
+      animation: tvIn 0.6s cubic-bezier(0.16,1,0.3,1) both;
+    }
+
+    /* header */
+    .hdr {
+      display: flex; align-items: baseline; gap: 1.4rem;
+      width: 100%;
+    }
+    .title {
+      font-size: 0.9rem; letter-spacing: 0.25em;
+      color: var(--green); text-transform: uppercase;
+    }
+    .score-wrap {
+      margin-left: auto;
+      font-size: 0.52rem; letter-spacing: 0.15em;
+      color: var(--green-dim);
+    }
+    .score-wrap span { color: var(--green); }
+
+    /* game canvas container */
+    .screen {
+      border: 1px solid var(--green-dim);
+      box-shadow:
+        0 0 0 1px rgba(255,255,255,0.06),
+        0 0 30px rgba(255,255,255,0.08),
+        inset 0 0 40px rgba(0,0,0,0.6);
+      position: relative;
+      background: var(--bg2);
+    }
+    #game { display: block; }
+
+    /* overlay screens (start / gameover) */
+    .overlay {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 0.9rem;
+      background: rgba(8,8,8,0.88);
+      z-index: 20;
+      transition: opacity 0.3s;
+    }
+    .overlay.hidden { opacity: 0; pointer-events: none; }
+
+    .overlay-title {
+      font-size: 1rem; letter-spacing: 0.3em;
+      text-transform: uppercase;
+      color: var(--green);
+      animation: pulse 1.6s ease-in-out infinite;
+    }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+
+    .overlay-sub {
+      font-size: 0.45rem; letter-spacing: 0.22em;
+      color: var(--green-dim);
+      text-transform: uppercase;
+      text-align: center;
+      line-height: 1.9;
+    }
+
+    .overlay-score {
+      font-size: 0.6rem; letter-spacing: 0.18em;
+      color: var(--green-dim);
+    }
+    .overlay-score b { color: var(--green); }
+
+    /* hi score blink */
+    .new-best {
+      font-size: 0.48rem; letter-spacing: 0.25em;
+      color: var(--green);
+      text-transform: uppercase;
+      animation: pulse 0.6s steps(1) infinite;
+      display: none;
+    }
+    .new-best.show { display: block; }
+    .invert-label.show { display: block !important; }
+
+    /* inverted mode styles */
+    #game-title.unlocked { cursor: pointer !important; animation: pulse 1.2s ease-in-out infinite; }
+    @keyframes invertEntry {
+      0%   { filter: invert(1) brightness(3); }
+      100% { filter: invert(0) brightness(1); }
+    }
+    .screen.invert-entry { animation: invertEntry 0.5s ease both; }
+
+    /* footer controls */
+    .controls {
+      display: flex; gap: 2rem;
+      font-size: 0.4rem; letter-spacing: 0.15em;
+      color: rgba(255,255,255,0.25);
+      text-transform: uppercase;
+    }
+    .controls b { color: var(--green-dim); }
+
+    /* back */
+    .back {
+      font-size: 0.42rem; letter-spacing: 0.2em;
+      color: rgba(255,255,255,0.18);
+      text-decoration: none;
+      text-transform: uppercase;
+      transition: color 0.25s;
+      cursor: none;
+      margin-top: 0.3rem;
+    }
+    .back:hover { color: rgba(255,255,255,0.5); }
+
+    /* speed indicator */
+    .level-wrap {
+      font-size: 0.42rem; letter-spacing: 0.15em;
+      color: var(--green-dim);
+      text-transform: uppercase;
+    }
+    .level-wrap span { color: var(--green); }
+
+    @keyframes eatFlash {
+      0%,100% { box-shadow: 0 0 0 1px rgba(255,255,255,0.06), 0 0 30px rgba(255,255,255,0.08), inset 0 0 40px rgba(0,0,0,0.6); }
+      50%      { box-shadow: 0 0 0 1px rgba(255,255,255,0.3),  0 0 60px rgba(255,255,255,0.3),  inset 0 0 40px rgba(0,0,0,0.3); }
+    }
+    .screen.flash { animation: eatFlash 0.18s ease; }
+
+  </style>
+</head>
+<body>
+
+  <div id="cursor"></div>
+  <canvas id="noise"></canvas>
+  <div class="scanlines"></div>
+  <div class="vignette"></div>
+
+  <div class="wrap">
+
+    <div class="hdr">
+      <span class="title" id="game-title">completely normal snakie :)</span>
+      <span class="level-wrap">LVL <span id="lvl">1</span></span>
+      <div class="score-wrap">SCORE <span id="score">0</span> &nbsp; HI <span id="hi">0</span></div>
+    </div>
+
+    <div class="screen" id="screen">
+      <canvas id="game"></canvas>
+      <div id="invert-label" class="invert-label" style="position:absolute;top:8px;left:50%;transform:translateX(-50%);font-size:0.4rem;letter-spacing:0.2em;color:rgba(255,255,255,0.6);text-transform:uppercase;z-index:25;pointer-events:none;display:none"></div>
+
+      <!-- start screen -->
+      <div class="overlay" id="ov-start">
+        <div class="overlay-title">completely normal snakie :)</div>
+        <div class="overlay-sub">
+          arrow keys or wasd to move<br>
+          eat the red dot<br>
+          don't hit yourself
+        </div>
+        <div class="overlay-sub" style="animation: pulse 1s steps(1) infinite">
+          press any key or tap to start
+        </div>
+      </div>
+
+      <!-- game over screen -->
+      <div class="overlay hidden" id="ov-dead">
+        <div class="overlay-title" style="color:#fff;text-shadow:0 0 12px rgba(255,255,255,0.5)">GAME OVER</div>
+        <div class="overlay-score">SCORE <b id="final-score">0</b></div>
+        <div class="new-best" id="new-best">✦ new best ✦</div>
+        <div class="overlay-sub" style="animation: pulse 1s steps(1) infinite">
+          press any key or tap to retry
+        </div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <span><b>↑↓←→ / WASD</b> move</span>
+      <span><b>P</b> pause</span>
+      <span>speed ↑ every 5 pts</span>
+    </div>
+
+    <a class="back" href="secret.html">← back to the void</a>
+
+  </div>
+
+  <script>
+    // cursor
+    const cur = document.getElementById('cursor');
+    document.addEventListener('mousemove', e => {
+      cur.style.left = e.clientX+'px'; cur.style.top = e.clientY+'px';
+    });
+
+    // slow noise
+    const noiseCanvas = document.getElementById('noise');
+    function resizeNoise() { noiseCanvas.width=innerWidth; noiseCanvas.height=innerHeight; }
+    resizeNoise(); window.addEventListener('resize', resizeNoise);
+    (function drawNoise() {
+      const ctx = noiseCanvas.getContext('2d');
+      const w=noiseCanvas.width, h=noiseCanvas.height;
+      const img = ctx.createImageData(w,h); const d=img.data;
+      for(let i=0;i<d.length;i+=4){const v=Math.random()*255|0; d[i]=v;d[i+1]=v;d[i+2]=v;d[i+3]=255;}
+      ctx.putImageData(img,0,0);
+      setTimeout(()=>requestAnimationFrame(drawNoise),120);
+    })();
+
+    const COLS = 26, ROWS = 22, CELL = 18;
+
+    const canvas = document.getElementById('game');
+    const ctx    = canvas.getContext('2d');
+    const screen = document.getElementById('screen');
+    canvas.width  = COLS * CELL;
+    canvas.height = ROWS * CELL;
+
+    const scoreEl      = document.getElementById('score');
+    const hiEl         = document.getElementById('hi');
+    const lvlEl        = document.getElementById('lvl');
+    const finalScoreEl = document.getElementById('final-score');
+    const newBestEl    = document.getElementById('new-best');
+    const ovStart      = document.getElementById('ov-start');
+    const ovDead       = document.getElementById('ov-dead');
+    const titleEl      = document.getElementById('game-title');
+    const invertLabel  = document.getElementById('invert-label');
+
+    const HEAD_COL  = '#ffffff';
+    const BODY_COL  = '#aaaaaa';
+    const FOOD_COL  = '#ffffff';
+    const GRID_COL  = 'rgba(255,255,255,0.03)';
+
+    // ── state ──
+    let snake, dir, nextDir, food, foodDir, nextFoodDir;
+    let score, hiScore, paused, state, inverted;
+    let invertUnlocked = false; // unlocks at score 7
+
+    hiScore = parseInt(localStorage.getItem('snakeHi') || '0');
+    hiEl.textContent = hiScore;
+
+    function rnd(n) { return Math.floor(Math.random()*n); }
+
+    function freeCell() {
+      let pos;
+      do { pos = {x: rnd(COLS), y: rnd(ROWS)}; }
+      while (snake.some(s => s.x===pos.x && s.y===pos.y));
+      return pos;
+    }
+
+    function initGame() {
+      const mx = Math.floor(COLS/2), my = Math.floor(ROWS/2);
+      snake    = [{x:mx,y:my},{x:mx-1,y:my},{x:mx-2,y:my}];
+      dir      = {x:1,y:0};
+      nextDir  = {x:1,y:0};
+      food     = freeCell();
+      foodDir  = {x:0,y:0};
+      nextFoodDir = {x:0,y:0};
+      score    = 0;
+      paused   = false;
+      inverted = false;
+      invertLabel.classList.remove('show');
+      scoreEl.textContent = '0';
+      lvlEl.textContent   = '1';
+      titleEl.classList.remove('unlocked');
+    }
+
+    function level() { return 1 + Math.floor(score/5); }
+    function tickMs() {
+      if (inverted) return Math.max(55, 170 - (level()-1)*14); // slightly faster in inverted
+      return Math.max(65, 200 - (level()-1)*18);
+    }
+
+    // ── AI: greedy snake chases food ──
+    function snakeAIDir() {
+      const head = snake[0];
+      const candidates = [
+        {x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}
+      ].filter(d => {
+        // don't reverse
+        if (d.x === -dir.x && d.y === -dir.y) return false;
+        // don't hit own body (except last segment which will move)
+        const nx = (head.x+d.x+COLS)%COLS;
+        const ny = (head.y+d.y+ROWS)%ROWS;
+        return !snake.slice(0,-1).some(s=>s.x===nx&&s.y===ny);
+      });
+      if (!candidates.length) return dir;
+      // pick candidate minimising manhattan distance to food
+      candidates.sort((a,b)=>{
+        const ax=(head.x+a.x+COLS)%COLS, ay=(head.y+a.y+ROWS)%ROWS;
+        const bx=(head.x+b.x+COLS)%COLS, by=(head.y+b.y+ROWS)%ROWS;
+        const da=Math.abs(ax-food.x)+Math.abs(ay-food.y);
+        const db=Math.abs(bx-food.x)+Math.abs(by-food.y);
+        return da-db;
+      });
+      return candidates[0];
+    }
+
+    // ── draw ──
+    function drawGrid() {
+      ctx.strokeStyle = GRID_COL;
+      ctx.lineWidth = 0.5;
+      for(let x=0;x<=COLS;x++){
+        ctx.beginPath(); ctx.moveTo(x*CELL,0); ctx.lineTo(x*CELL,ROWS*CELL); ctx.stroke();
+      }
+      for(let y=0;y<=ROWS;y++){
+        ctx.beginPath(); ctx.moveTo(0,y*CELL); ctx.lineTo(COLS*CELL,y*CELL); ctx.stroke();
+      }
+    }
+
+    function drawRoundRect(x,y,w,h,r,color,glow) {
+      ctx.save();
+      if(glow){ ctx.shadowColor=glow; ctx.shadowBlur=10; }
+      ctx.fillStyle = color;
+      ctx.beginPath(); ctx.roundRect(x,y,w,h,[r]); ctx.fill();
+      ctx.restore();
+    }
+
+    function drawFrame() {
+      ctx.fillStyle = 'rgba(8,8,8,0.75)';
+      ctx.fillRect(0,0,canvas.width,canvas.height);
+      drawGrid();
+
+      // snake
+      snake.forEach((seg,i) => {
+        const pad   = i===0 ? 1 : 2;
+        const color = i===0 ? HEAD_COL : BODY_COL;
+        const glow  = i===0 ? HEAD_COL : 'rgba(255,255,255,0.35)';
+        const frac  = 1 - (i / snake.length) * 0.35;
+        const size  = (CELL-pad*2)*frac;
+        const off   = (CELL-size)/2;
+        drawRoundRect(seg.x*CELL+off, seg.y*CELL+off, size, size, 3, color, glow);
+      });
+
+      // food
+      const pulse = 0.7 + 0.3*Math.sin(Date.now()/200);
+      const fs    = (CELL-6)*pulse;
+      ctx.save();
+      if (inverted) {
+        // player-controlled food: draw as a crosshair cursor
+        const cx = food.x*CELL+CELL/2, cy = food.y*CELL+CELL/2;
+        const r  = fs/2;
+        ctx.strokeStyle = FOOD_COL;
+        ctx.lineWidth   = 1.5;
+        ctx.shadowColor = 'rgba(255,255,255,0.9)';
+        ctx.shadowBlur  = 14*pulse;
+        ctx.globalAlpha = 0.9;
+        ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(cx-r*1.5,cy); ctx.lineTo(cx+r*1.5,cy); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(cx,cy-r*1.5); ctx.lineTo(cx,cy+r*1.5); ctx.stroke();
+      } else {
+        ctx.shadowColor = 'rgba(255,255,255,0.9)'; ctx.shadowBlur = 14*pulse;
+        ctx.fillStyle   = FOOD_COL;
+        ctx.beginPath();
+        ctx.arc(food.x*CELL+CELL/2, food.y*CELL+CELL/2, fs/2, 0, Math.PI*2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    let lastTick = 0, animId = null;
+
+    function gameStep(ts) {
+      if(state !== 'playing'){ animId=null; return; }
+      animId = requestAnimationFrame(gameStep);
+      drawFrame();
+      if(paused) return;
+      if(ts - lastTick < tickMs()) return;
+      lastTick = ts;
+
+      if (inverted) {
+        // ── INVERTED: player moves food, snake chases ──
+        foodDir = {...nextFoodDir};
+        const newFood = {
+          x: (food.x + foodDir.x + COLS) % COLS,
+          y: (food.y + foodDir.y + ROWS) % ROWS,
+        };
+        // can't move into snake body (walls block you)
+        if (!snake.some(s=>s.x===newFood.x&&s.y===newFood.y)) {
+          food = newFood;
+        }
+
+        // snake AI moves toward food
+        dir = snakeAIDir();
+        const head = {
+          x: (snake[0].x+dir.x+COLS)%COLS,
+          y: (snake[0].y+dir.y+ROWS)%ROWS,
+        };
+
+        // snake catches food → game over
+        if (head.x===food.x && head.y===food.y) {
+          endGame(); return;
+        }
+        // snake hits self
+        if (snake.some(s=>s.x===head.x&&s.y===head.y)) {
+          endGame(); return;
+        }
+
+        snake.unshift(head);
+        snake.pop(); // snake doesn't grow in inverted mode
+
+      } else {
+        // ── NORMAL ──
+        dir = {...nextDir};
+        const head = {
+          x: (snake[0].x+dir.x+COLS)%COLS,
+          y: (snake[0].y+dir.y+ROWS)%ROWS,
+        };
+        if(snake.some(s=>s.x===head.x&&s.y===head.y)){ endGame(); return; }
+        snake.unshift(head);
+
+        if(head.x===food.x && head.y===food.y){
+          score++;
+          scoreEl.textContent = score;
+          lvlEl.textContent   = level();
+          food = freeCell();
+          screen.classList.remove('flash');
+          void screen.offsetWidth;
+          screen.classList.add('flash');
+          playBeep(880 + score*12, 0.06);
+          // unlock title click at score 7
+          if (score >= 7 && !invertUnlocked) {
+            invertUnlocked = true;
+            titleEl.classList.add('unlocked');
+            // subtle beep hint
+            setTimeout(()=>playBeep(1200, 0.08), 120);
+          }
+        } else {
+          snake.pop();
+        }
+      }
+    }
+
+    function activateInvert() {
+      if (!invertUnlocked || state !== 'playing' || inverted) return;
+      inverted = true;
+      invertLabel.classList.add('show');
+      // dramatic entry flash
+      screen.classList.remove('invert-entry');
+      void screen.offsetWidth;
+      screen.classList.add('invert-entry');
+      // spawn food far from snake head
+      let best = food, bestDist = 0;
+      for(let i=0;i<20;i++){
+        const c = freeCell();
+        const d = Math.abs(c.x-snake[0].x)+Math.abs(c.y-snake[0].y);
+        if(d > bestDist){ bestDist=d; best=c; }
+      }
+      food = best;
+      foodDir = {x:0,y:0}; nextFoodDir = {x:0,y:0};
+      // spooky sound
+      playInvertSound();
+      // update controls hint
+      document.querySelector('.controls').innerHTML =
+        '<span><b>↑↓←→ / WASD</b> dodge</span><span><b>survive</b> the snake</span>';
+    }
+
+    function startGame() {
+      ovStart.classList.add('hidden');
+      ovDead.classList.add('hidden');
+      initGame();
+      invertUnlocked = false;
+      state = 'playing';
+      lastTick = 0;
+      if(animId) cancelAnimationFrame(animId);
+      animId = requestAnimationFrame(gameStep);
+      // restore controls text
+      document.querySelector('.controls').innerHTML =
+        '<span><b>↑↓←→ / WASD</b> move</span><span><b>P</b> pause</span><span>speed ↑ every 5 pts</span>';
+    }
+
+    function endGame() {
+      state = 'dead';
+      playDeathSound();
+      invertLabel.classList.remove('show');
+      if(!inverted && score > hiScore){
+        hiScore = score;
+        localStorage.setItem('snakeHi', hiScore);
+        hiEl.textContent = hiScore;
+        newBestEl.classList.add('show');
+      } else {
+        newBestEl.classList.remove('show');
+      }
+      finalScoreEl.textContent = score;
+      // custom game over message for inverted
+      document.querySelector('#ov-dead .overlay-title').textContent =
+        inverted ? 'it got you.' : 'GAME OVER';
+      ovDead.classList.remove('hidden');
+    }
+
+    // ── audio ──
+    // Single shared AudioContext — browsers block new ones created outside user gestures
+    const ac = new (window.AudioContext || window.webkitAudioContext)();
+    // Resume context on first user interaction (required by browser autoplay policy)
+    document.addEventListener('keydown', () => { if(ac.state==='suspended') ac.resume(); }, { once: true });
+    document.addEventListener('click',   () => { if(ac.state==='suspended') ac.resume(); }, { once: true });
+    document.addEventListener('touchend',() => { if(ac.state==='suspended') ac.resume(); }, { once: true });
+
+    function playBeep(freq, dur) {
+      try {
+        const o=ac.createOscillator(), g=ac.createGain();
+        o.type='square'; o.frequency.value=freq;
+        g.gain.setValueAtTime(0.06, ac.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime+dur);
+        o.connect(g); g.connect(ac.destination);
+        o.start(); o.stop(ac.currentTime+dur);
+      } catch(e){}
+    }
+
+    function playDeathSound() {
+      try {
+        [200,150,100,70].forEach((f,i)=>{
+          const o=ac.createOscillator(), g=ac.createGain();
+          o.type='sawtooth'; o.frequency.value=f;
+          g.gain.setValueAtTime(0.1, ac.currentTime+i*0.08);
+          g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime+i*0.08+0.2);
+          o.connect(g); g.connect(ac.destination);
+          o.start(ac.currentTime+i*0.08); o.stop(ac.currentTime+i*0.08+0.3);
+        });
+      } catch(e){}
+    }
+
+    function playInvertSound() {
+      try {
+        const o=ac.createOscillator(), g=ac.createGain();
+        o.type='sine';
+        o.frequency.setValueAtTime(600, ac.currentTime);
+        o.frequency.exponentialRampToValueAtTime(80, ac.currentTime+0.6);
+        g.gain.setValueAtTime(0.15, ac.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime+0.65);
+        o.connect(g); g.connect(ac.destination);
+        o.start(); o.stop(ac.currentTime+0.7);
+      } catch(e){}
+    }
+
+    // ── input ──
+    const DIRS = {
+      ArrowUp:{x:0,y:-1},ArrowDown:{x:0,y:1},ArrowLeft:{x:-1,y:0},ArrowRight:{x:1,y:0},
+      w:{x:0,y:-1},s:{x:0,y:1},a:{x:-1,y:0},d:{x:1,y:0},
+      W:{x:0,y:-1},S:{x:0,y:1},A:{x:-1,y:0},D:{x:1,y:0},
+    };
+
+    document.addEventListener('keydown', e => {
+      if(state==='start'||state==='dead'){
+        if(!['F5','F11','F12','Tab'].includes(e.key)){ e.preventDefault(); startGame(); }
+        return;
+      }
+      if(e.key==='p'||e.key==='P'){ paused=!paused; return; }
+      const d = DIRS[e.key];
+      if(d){
+        e.preventDefault();
+        if(inverted){
+          // move food, no reverse restriction
+          nextFoodDir = d;
+        } else {
+          if(d.x !== -dir.x || d.y !== -dir.y) nextDir = d;
+        }
+      }
+    });
+
+    // title click → invert
+    titleEl.addEventListener('click', activateInvert);
+
+    // touch
+    let touchStart=null;
+    canvas.addEventListener('touchstart',e=>{ touchStart={x:e.touches[0].clientX,y:e.touches[0].clientY}; e.preventDefault(); },{passive:false});
+    canvas.addEventListener('touchend',e=>{
+      if(!touchStart) return;
+      if(state==='start'||state==='dead'){ startGame(); return; }
+      const dx=e.changedTouches[0].clientX-touchStart.x;
+      const dy=e.changedTouches[0].clientY-touchStart.y;
+      if(Math.abs(dx)<10&&Math.abs(dy)<10) return;
+      let d;
+      if(Math.abs(dx)>Math.abs(dy)) d=dx>0?{x:1,y:0}:{x:-1,y:0};
+      else d=dy>0?{x:0,y:1}:{x:0,y:-1};
+      if(inverted){ nextFoodDir=d; }
+      else if(d.x !== -dir.x || d.y !== -dir.y){ nextDir=d; }
+      touchStart=null;
+    },{passive:false});
+
+    [ovStart,ovDead].forEach(el=>el.addEventListener('click',()=>startGame()));
+
+    state='start';
+    initGame();
+    (function firstDraw(){
+      ctx.fillStyle='#080808'; ctx.fillRect(0,0,canvas.width,canvas.height);
+      drawGrid(); drawFrame();
+    })();
+  </script>
+</body>
+</html>
